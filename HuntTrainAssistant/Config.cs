@@ -65,4 +65,8 @@ public class Config : IEzConfig
     public bool AutoPathfindAfterTeleport = true; // 跨地图传送后接力寻路
     public bool AutoPathfindUseSafeDistance = true; // 车头链接寻路安全距离开关
     public float AutoPathfindSafeDistance = 20f; // 车头链接寻路安全距离
+
+    // 智能水晶传送
+    public bool SmartAetheryteTeleport = true; // 寻路前若传送至最近水晶更近则传送
+    public float SmartAetheryteTeleportThreshold = 150f; // 直飞距离 - 水晶到目的地距离 的阈值
 }

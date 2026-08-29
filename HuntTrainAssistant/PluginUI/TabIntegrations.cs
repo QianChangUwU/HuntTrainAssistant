@@ -81,6 +81,16 @@ public class TabIntegrations
                 ImGui.SetNextItemWidth(200f);
                 ImGuiEx.SliderFloat("车头链接安全距离", ref P.Config.AutoPathfindSafeDistance, 0, 300);
                 ImGuiEx.HelpMarker("默认值: 20\n按住左 Ctrl 并点击以自定义输入");
+                ImGui.Checkbox("智能水晶传送", ref P.Config.SmartAetheryteTeleport);
+                ImGuiEx.HelpMarker("寻路前比较直飞距离与传送至最近水晶再飞的距离。\n若直飞比经水晶多出的距离超过阈值，则先传送至最近的水晶再寻路，节省飞行时间。");
+                if (P.Config.SmartAetheryteTeleport)
+                {
+                    ImGui.Indent();
+                    ImGui.SetNextItemWidth(200f);
+                    ImGuiEx.SliderFloat("传送节省距离阈值", ref P.Config.SmartAetheryteTeleportThreshold, 0, 500);
+                    ImGuiEx.HelpMarker("默认值: 150\n直飞距离 - 最近水晶到目的地距离 > 此值时触发传送。\n值越大越保守（只在明显划算时传送）。\n按住左 Ctrl 并点击以自定义输入");
+                    ImGui.Unindent();
+                }
                 ImGui.Unindent();
             }
         })

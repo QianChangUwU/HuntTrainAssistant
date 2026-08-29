@@ -28,7 +28,7 @@ public unsafe class HuntTrainAssistant : IDalamudPlugin
     public VnavmeshIPC VnavmeshIPC;
     public int LastInstance = 0;
     public HashSet<DawntrailARank> KilledARanks = [];
-    internal (uint Territory, float WorldX, float WorldZ, DateTime RecordedAt)? PendingPathfindLink = null;
+    internal (uint Territory, float WorldX, float WorldZ, DateTime RecordedAt, bool TeleportAttempted)? PendingPathfindLink = null;
     public string CommandComments;
     public string CommandCommentsBlu;
     public float TmpSafeStopDistance;
@@ -208,6 +208,49 @@ public unsafe class HuntTrainAssistant : IDalamudPlugin
         if (S.LifestreamIPC.IsBusy()) return; // 等待切分线等 Lifestream 操作完成
         if (TaskManager.IsBusy) return;
         if (!TaskMovement.Nav.IsReady()) return;
+
+        // 智能水晶传送：若直飞距离 - 最近水晶到目的地距离 > 阈值，先传送至最近水晶
+        if (Config.SmartAetheryteTeleport && !link.TeleportAttempted)
+        {
+            var targetWorld = new Vector3(link.WorldX, 0, link.WorldZ);
+            var playerPos = Svc.Objects.LocalPlayer.Position;
+            var directFly = Vector3.Distance(new Vector3(playerPos.X, 0, playerPos.Z), targetWorld);
+
+            var nearestAethId = ECommons.GameHelpers.Map.FindClosestAetheryte(Svc.ClientState.TerritoryType, targetWorld);
+            if (nearestAethId != 0)
+            {
+                var aethPos = ECommons.GameHelpers.Map.AetherytePosition(nearestAethId);
+                var aethToDest = Vector3.Distance(new Vector3(aethPos.X, 0, aethPos.Z), targetWorld);
+
+                if (directFly - aethToDest > Config.SmartAetheryteTeleportThreshold)
+                {
+                    // 标记已尝试，避免重复传送
+                    PendingPathfindLink = (link.Territory, link.WorldX, link.WorldZ, link.RecordedAt, true);
+
+                    bool teleported = false;
+                    if (S.TeleporterIPC.Teleport(nearestAethId, 0))
+                    {
+                        PluginLog.Information($"Teleporting using Teleporter plugin");
+                        teleported = true;
+                    }
+                    else if (S.LifestreamIPC.Teleport(nearestAethId))
+                    {
+                        PluginLog.Information($"Teleporting using Lifestream plugin");
+                        teleported = true;
+                    }
+
+                    if (teleported)
+                    {
+                        PluginLog.Information($"Smart aetheryte teleport: direct {directFly:F0}y vs via aetheryte {aethToDest:F0}y (saved {directFly - aethToDest:F0}y)");
+                        return; // pending 保留，等到达后重新评估（此时差值 < 阈值 → 正常寻路）
+                    }
+                    else
+                    {
+                        PluginLog.Warning($"Smart aetheryte teleport failed (aetheryte {nearestAethId}), falling back to direct pathfind");
+                    }
+                }
+            }
+        }
 
         PendingPathfindLink = null;
         PluginLog.Information($"Auto pathfinding to conductor link (territory {link.Territory}, world {link.WorldX:F1}, {link.WorldZ:F1})");

@@ -88,7 +88,7 @@ internal unsafe static class ChatMessageHandler
                                 if (sameMap || P.Config.AutoPathfindAfterTeleport)
                                 {
                                     var worldXZ = PositionHelper.MapToWorld(new Vector2(m.XCoord, m.YCoord), m.Map.Value);
-                                    P.PendingPathfindLink = (m.TerritoryType.RowId, worldXZ.X, worldXZ.Y, DateTime.Now);
+                                    P.PendingPathfindLink = (m.TerritoryType.RowId, worldXZ.X, worldXZ.Y, DateTime.Now, false);
                                     PluginLog.Information($"Conductor map link recorded for auto pathfind (territory {m.TerritoryType.RowId}, world {worldXZ.X:F1}, {worldXZ.Y:F1})");
                                 }
                             }
