@@ -17,9 +17,9 @@ download_url = f"https://github.com/{repo_full_name}/releases/download/v{version
 entry = next((x for x in data if x.get('InternalName') == 'HuntTrainAssistant'), {})
 
 entry['Name'] = 'HuntTrainAssistant'
-entry['Author'] = 'NightmareXIV'
-entry['Punchline'] = 'Hunt train assistance tool.'
-entry['Description'] = 'Provides useful tools for hunt trains such as: highlighting conductor messages and muting all other chat, auto-opening flags from conductors and auto-teleporting to announced destination.'
+entry['Author'] = 'NightmareXIV, QianChangUwU'
+entry['Punchline'] = '狩猎列车辅助工具。'
+entry['Description'] = '提供实用的狩猎列车工具：高亮显示车头消息并屏蔽其他聊天、自动打开车头发送的地图标记、自动传送至车头发布的位置，并支持自动寻路前往。'
 entry['InternalName'] = 'HuntTrainAssistant'
 entry['AssemblyVersion'] = version
 entry['TestingAssemblyVersion'] = version
