@@ -68,6 +68,21 @@ public class TabIntegrations
             ImGui.SetNextItemWidth(200f);
             ImGuiEx.SliderFloat("随机终点偏移半径", ref P.Config.RandomDestinationOffsetRadius, 0, 15);
             ImGuiEx.HelpMarker("默认值: 6\n寻路终点随机偏移在安全距离计算之后进行，数值过大可能导致寻路过于靠近 S 怪。\n按住左 Ctrl 并点击以自定义输入");
+            ImGui.Separator();
+            ImGui.Checkbox("车头发送地图位置时自动寻路前往", ref P.Config.AutoPathfindOnConductorLink);
+            ImGuiEx.HelpMarker("检测到车头发送地图标记时，自动寻路前往该位置。\n适用于跟随车头打 A 怪等场景。\n战斗中不会触发，战斗结束后自动前往。\n飞行寻路、随机终点偏移、自动上坐骑沿用上方通用配置。");
+            if (P.Config.AutoPathfindOnConductorLink)
+            {
+                ImGui.Indent();
+                ImGui.Checkbox("跨地图传送后接力寻路", ref P.Config.AutoPathfindAfterTeleport);
+                ImGuiEx.HelpMarker("车头发送其他地图的位置时，自动传送到达后继续寻路前往目标位置。\n需要启用自动传送功能。");
+                ImGui.Checkbox("使用寻路终点安全距离", ref P.Config.AutoPathfindUseSafeDistance);
+                ImGuiEx.HelpMarker("启用后，寻路终点与标记位置保持指定距离，防止靠近有仇恨的 A 怪。\n独立于上方 S 怪安全距离配置。");
+                ImGui.SetNextItemWidth(200f);
+                ImGuiEx.SliderFloat("车头链接安全距离", ref P.Config.AutoPathfindSafeDistance, 0, 300);
+                ImGuiEx.HelpMarker("默认值: 20\n按住左 Ctrl 并点击以自定义输入");
+                ImGui.Unindent();
+            }
         })
 
         .Section("触发过滤")

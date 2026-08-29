@@ -81,6 +81,17 @@ internal unsafe static class ChatMessageHandler
                                 }
                             }
 
+                            // 车头链接自动寻路
+                            if (P.Config.AutoPathfindOnConductorLink)
+                            {
+                                var sameMap = m.TerritoryType.RowId == Svc.ClientState.TerritoryType;
+                                if (sameMap || P.Config.AutoPathfindAfterTeleport)
+                                {
+                                    P.PendingPathfindLink = (m.TerritoryType.RowId, m.RawX / 1000f, m.RawY / 1000f, DateTime.Now);
+                                    PluginLog.Information($"Conductor map link recorded for auto pathfind (territory {m.TerritoryType.RowId}, {m.RawX / 1000f:F1}, {m.RawY / 1000f:F1})");
+                                }
+                            }
+
                             if (P.Config.AutoOpenMap)
                             {
                                 var flag = AgentMap.Instance()->FlagMapMarker;

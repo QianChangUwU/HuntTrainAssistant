@@ -27,6 +27,11 @@ public static class TaskMovement
 
     private static SeString BuildSRankMapLink(IBattleNpc target)
     {
+        return BuildPositionMapLink(target.Position);
+    }
+
+    private static SeString BuildPositionMapLink(Vector3 position)
+    {
         uint territoryId = Svc.ClientState.TerritoryType;
         uint mapId = Svc.ClientState.MapId;
 
@@ -35,7 +40,7 @@ public static class TaskMovement
             return ("(坐标转换失败)");
 
         var mapVec = PositionHelper.WorldToMap(
-            new Vector2(target.Position.X, target.Position.Z),
+            new Vector2(position.X, position.Z),
             map.Value
         );
 
@@ -263,6 +268,56 @@ public static class TaskMovement
         Nav.PathfindAndMoveTo(finalPos, fly);
     }
 
+    public static void EnqueueMoveToMapPosition(uint territory, float mapX, float mapY)
+    {
+        if (!Nav.IsReady())
+        {
+            PrintWhiteMessage("导航系统未准备好，无法寻路");
+            return;
+        }
+
+        var map = Svc.Data.GetExcelSheet<Map>()?.GetRow(Svc.ClientState.MapId);
+        if (map == null || map.Value.TerritoryType.RowId != territory)
+        {
+            PrintWhiteMessage("当前地图与目标位置不符，寻路取消");
+            return;
+        }
+
+        var worldXZ = PositionHelper.MapToWorld(new Vector2(mapX, mapY), map.Value);
+        var targetPos = SmartDestination.SnapToFloor(new Vector3(worldXZ.X, 1024f, worldXZ.Y));
+
+        var playerPos = Svc.Objects.LocalPlayer.Position;
+        bool fly = !P.Config.ForceGroundPathfinding;
+
+        var dist = Vector3.Distance(playerPos, targetPos);
+        var mapLink = BuildPositionMapLink(targetPos);
+        var random = P.Config.RandomDestinationOffset;
+        var randomdistance = P.Config.RandomDestinationOffsetRadius;
+
+        var msg = new SeStringBuilder()
+            .AddUiForeground((int)UIColor.White)
+            .Append("\ue078 自动寻路到车头标记位置\n")
+            .Append("位置: ")
+            .Add(mapLink.Payloads)
+            .Append($"\n距离: {dist:F1}")
+            .Append($"\n安全距离: {(P.Config.AutoPathfindUseSafeDistance ? P.Config.AutoPathfindSafeDistance.ToString("F1") : "否")}")
+            .Append($"\n飞行寻路: {(fly ? "是" : "否")}")
+            .Append($"\n终点偏移: {(random ? $"是\n偏移距离: {randomdistance:F1}" : "否")}")
+            .AddUiForegroundOff()
+            .Build();
+
+        Svc.Chat.Print(msg);
+
+        var finalPos = SmartDestination.ComputeFinalDestinationForConductorLink(
+            targetPos,
+            playerPos,
+            fly
+        );
+
+        TaskMount.EnqueueIfEnabled();
+        Nav.PathfindAndMoveTo(finalPos, fly);
+    }
+
     public static bool CanFly()
     {
         return Control.GetFlightAllowedStatus() == 0 || Svc.Condition[ConditionFlag.InFlight];
@@ -284,8 +339,7 @@ public static class SmartDestination
 
     public static Vector3 ComputeFinalDestination(Vector3 monsterPos, Vector3 playerPos, bool isFlying)
     {
-        float safeDistance = P.Config.UseSafeStopDistance ? P.Config.SafeStopDistance : 0f;
-        return ComputeUnifiedDestination(monsterPos, playerPos, safeDistance, isFlying);
+        return ComputeUnifiedDestination(monsterPos, playerPos, P.Config.SafeStopDistance, isFlying, P.Config.UseSafeStopDistance);
     }
 
     public static Vector3 ComputeFinalDestinationForCustomSafeDistance(
@@ -295,16 +349,21 @@ public static class SmartDestination
         bool isFlying
     )
     {
-        return ComputeUnifiedDestination(monsterPos, playerPos, safeDistance, isFlying);
+        return ComputeUnifiedDestination(monsterPos, playerPos, safeDistance, isFlying, P.Config.UseSafeStopDistance);
     }
 
-    private static Vector3 ComputeUnifiedDestination(Vector3 monsterPos, Vector3 playerPos, float safeDistance, bool isFlying)
+    public static Vector3 ComputeFinalDestinationForConductorLink(Vector3 monsterPos, Vector3 playerPos, bool isFlying)
+    {
+        return ComputeUnifiedDestination(monsterPos, playerPos, P.Config.AutoPathfindSafeDistance, isFlying, P.Config.AutoPathfindUseSafeDistance);
+    }
+
+    private static Vector3 ComputeUnifiedDestination(Vector3 monsterPos, Vector3 playerPos, float safeDistance, bool isFlying, bool safeDistanceEnabled)
     {
         var dir = Vector3.Normalize(new Vector3(monsterPos.X - playerPos.X, 0, monsterPos.Z - playerPos.Z));
         if (dir == Vector3.Zero)
             dir = Vector3.UnitX;
 
-        bool safeDistanceEnabled = P.Config.UseSafeStopDistance && safeDistance > 0f;
+        safeDistanceEnabled = safeDistanceEnabled && safeDistance > 0f;
         if (!safeDistanceEnabled)
             safeDistance = 0f;
 
@@ -424,7 +483,7 @@ public static class SmartDestination
         return point;
     }
 
-    private static Vector3 SnapToFloor(Vector3 pos)
+    internal static Vector3 SnapToFloor(Vector3 pos)
     {
         var floor = Nav.PointOnFloor(pos, true, 5f);
         if (floor != null)

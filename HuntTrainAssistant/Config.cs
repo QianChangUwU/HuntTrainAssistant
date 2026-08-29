@@ -59,4 +59,10 @@ public class Config : IEzConfig
     // misc
     public bool BluPlaceholder = false; // 青魔招募占位
     public bool ForceGroundPathfinding = false; //强制使用地面寻路
+
+    // 车头链接自动寻路
+    public bool AutoPathfindOnConductorLink = false; // 车头发送地图位置时自动寻路前往
+    public bool AutoPathfindAfterTeleport = true; // 跨地图传送后接力寻路
+    public bool AutoPathfindUseSafeDistance = true; // 车头链接寻路安全距离开关
+    public float AutoPathfindSafeDistance = 20f; // 车头链接寻路安全距离
 }

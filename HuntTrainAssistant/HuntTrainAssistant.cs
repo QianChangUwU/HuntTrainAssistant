@@ -28,6 +28,7 @@ public unsafe class HuntTrainAssistant : IDalamudPlugin
     public VnavmeshIPC VnavmeshIPC;
     public int LastInstance = 0;
     public HashSet<DawntrailARank> KilledARanks = [];
+    internal (uint Territory, float MapX, float MapY, DateTime RecordedAt)? PendingPathfindLink = null;
     public string CommandComments;
     public string CommandCommentsBlu;
     public float TmpSafeStopDistance;
@@ -175,6 +176,42 @@ public unsafe class HuntTrainAssistant : IDalamudPlugin
                 TeleportTo = null;
             }
         }
+        ProcessPendingPathfindLink();
+    }
+
+    private void ProcessPendingPathfindLink()
+    {
+        if (!Config.AutoPathfindOnConductorLink || PendingPathfindLink == null) return;
+        var link = PendingPathfindLink.Value;
+
+        if ((DateTime.Now - link.RecordedAt).TotalMinutes > 10)
+        {
+            PendingPathfindLink = null;
+            PluginLog.Debug($"Pending pathfind link expired (territory {link.Territory})");
+            return;
+        }
+
+        if (Svc.ClientState.TerritoryType != link.Territory)
+        {
+            PendingPathfindLink = null;
+            PluginLog.Debug($"Pending pathfind link cleared: territory mismatch ({Svc.ClientState.TerritoryType} != {link.Territory})");
+            return;
+        }
+
+        if (TeleportTo != null) return; // 等待自动传送流程结束
+        if (Utils.CheckMultiMode()) return;
+        if (Svc.Objects.LocalPlayer == null || !Player.Interactable) return;
+        if (Svc.Condition[ConditionFlag.InCombat]) return; // 战斗中不触发，战斗结束后自动前往
+        if (Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51]) return;
+        if (Svc.Condition[ConditionFlag.Casting] || Svc.Objects.LocalPlayer.IsCasting) return;
+        if (!IsScreenReady() || Player.IsAnimationLocked) return;
+        if (S.LifestreamIPC.IsBusy()) return; // 等待切分线等 Lifestream 操作完成
+        if (TaskManager.IsBusy) return;
+        if (!TaskMovement.Nav.IsReady()) return;
+
+        PendingPathfindLink = null;
+        PluginLog.Information($"Auto pathfinding to conductor link (territory {link.Territory}, {link.MapX:F1}, {link.MapY:F1})");
+        TaskMovement.EnqueueMoveToMapPosition(link.Territory, link.MapX, link.MapY);
     }
 
     public string Name => "HuntTrainAssistant";
