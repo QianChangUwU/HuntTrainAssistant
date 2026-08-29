@@ -268,7 +268,7 @@ public static class TaskMovement
         Nav.PathfindAndMoveTo(finalPos, fly);
     }
 
-    public static void EnqueueMoveToMapPosition(uint territory, float mapX, float mapY)
+    public static void EnqueueMoveToWorldPosition(uint territory, float worldX, float worldZ)
     {
         if (!Nav.IsReady())
         {
@@ -276,15 +276,7 @@ public static class TaskMovement
             return;
         }
 
-        var map = Svc.Data.GetExcelSheet<Map>()?.GetRow(Svc.ClientState.MapId);
-        if (map == null || map.Value.TerritoryType.RowId != territory)
-        {
-            PrintWhiteMessage("当前地图与目标位置不符，寻路取消");
-            return;
-        }
-
-        var worldXZ = PositionHelper.MapToWorld(new Vector2(mapX, mapY), map.Value);
-        var targetPos = SmartDestination.SnapToFloor(new Vector3(worldXZ.X, 1024f, worldXZ.Y));
+        var targetPos = SmartDestination.SnapToFloor(new Vector3(worldX, 1024f, worldZ));
 
         var playerPos = Svc.Objects.LocalPlayer.Position;
         bool fly = !P.Config.ForceGroundPathfinding;

@@ -28,7 +28,7 @@ public unsafe class HuntTrainAssistant : IDalamudPlugin
     public VnavmeshIPC VnavmeshIPC;
     public int LastInstance = 0;
     public HashSet<DawntrailARank> KilledARanks = [];
-    internal (uint Territory, float MapX, float MapY, DateTime RecordedAt)? PendingPathfindLink = null;
+    internal (uint Territory, float WorldX, float WorldZ, DateTime RecordedAt)? PendingPathfindLink = null;
     public string CommandComments;
     public string CommandCommentsBlu;
     public float TmpSafeStopDistance;
@@ -210,8 +210,8 @@ public unsafe class HuntTrainAssistant : IDalamudPlugin
         if (!TaskMovement.Nav.IsReady()) return;
 
         PendingPathfindLink = null;
-        PluginLog.Information($"Auto pathfinding to conductor link (territory {link.Territory}, {link.MapX:F1}, {link.MapY:F1})");
-        TaskMovement.EnqueueMoveToMapPosition(link.Territory, link.MapX, link.MapY);
+        PluginLog.Information($"Auto pathfinding to conductor link (territory {link.Territory}, world {link.WorldX:F1}, {link.WorldZ:F1})");
+        TaskMovement.EnqueueMoveToWorldPosition(link.Territory, link.WorldX, link.WorldZ);
     }
 
     public string Name => "HuntTrainAssistant";

@@ -87,8 +87,9 @@ internal unsafe static class ChatMessageHandler
                                 var sameMap = m.TerritoryType.RowId == Svc.ClientState.TerritoryType;
                                 if (sameMap || P.Config.AutoPathfindAfterTeleport)
                                 {
-                                    P.PendingPathfindLink = (m.TerritoryType.RowId, m.RawX / 1000f, m.RawY / 1000f, DateTime.Now);
-                                    PluginLog.Information($"Conductor map link recorded for auto pathfind (territory {m.TerritoryType.RowId}, {m.RawX / 1000f:F1}, {m.RawY / 1000f:F1})");
+                                    var worldXZ = PositionHelper.MapToWorld(new Vector2(m.XCoord, m.YCoord), m.Map.Value);
+                                    P.PendingPathfindLink = (m.TerritoryType.RowId, worldXZ.X, worldXZ.Y, DateTime.Now);
+                                    PluginLog.Information($"Conductor map link recorded for auto pathfind (territory {m.TerritoryType.RowId}, world {worldXZ.X:F1}, {worldXZ.Y:F1})");
                                 }
                             }
 
