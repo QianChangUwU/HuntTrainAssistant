@@ -1,0 +1,215 @@
+name: Auto release on master push
+
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force create release even if tag exists'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  detect-version-change:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      should-release: ${{ steps.check-release.outputs.should-release }}
+      tag-exists: ${{ steps.check-tag.outputs.exists }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from csproj
+        id: get-version
+        run: |
+          VERSION=$(grep -oP '<Version>\K[^<]+' HuntTrainAssistant/HuntTrainAssistant.csproj | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "Error: Could not extract version from HuntTrainAssistant/HuntTrainAssistant.csproj"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Check if tag already exists
+        id: check-tag
+        run: |
+          TAG="v${{ steps.get-version.outputs.version }}"
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG does not exist"
+          fi
+
+      - name: Determine if release should be created
+        id: check-release
+        run: |
+          FORCE_RELEASE="${{ github.event.inputs.force_release }}"
+          TAG_EXISTS="${{ steps.check-tag.outputs.exists }}"
+          if [ "$FORCE_RELEASE" = "true" ] || [ "$TAG_EXISTS" = "false" ]; then
+            echo "should-release=true" >> $GITHUB_OUTPUT
+            echo "Will create release"
+          else
+            echo "should-release=false" >> $GITHUB_OUTPUT
+            echo "Will not create release (tag exists and not forced)"
+          fi
+
+  build-and-release:
+    needs: detect-version-change
+    if: needs.detect-version-change.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.detect-version-change.outputs.version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            PREV_TAG=$(git describe --tags --abbrev=0)
+            CHANGELOG=$(git log --pretty=format:'- %s (%h)' "${PREV_TAG}..HEAD")
+          else
+            CHANGELOG=$(git log --pretty=format:'- %s (%h)' -20)
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: .nuget
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Download and setup Dalamud
+        run: |
+          echo "Downloading Dalamud..."
+          wget -q https://goatcorp.github.io/dalamud-distrib/stg/latest.zip -O dalamud.zip
+          unzip -q dalamud.zip -d .dalamud
+          echo "DALAMUD_HOME=$PWD/.dalamud/" >> $GITHUB_ENV
+
+      - name: Restore NuGet packages
+        run: dotnet restore HuntTrainAssistant/HuntTrainAssistant.csproj /p:Configuration=Release --packages .nuget
+
+      - name: Build Project
+        run: |
+          dotnet build HuntTrainAssistant/HuntTrainAssistant.csproj \
+          -c Release \
+          -p:DalamudLibPath=$DALAMUD_HOME \
+          --source $PWD/.nuget
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p release
+          cp "HuntTrainAssistant/bin/Release/HuntTrainAssistant/latest.zip" "release/latest.zip"
+          cp "HuntTrainAssistant/bin/Release/HuntTrainAssistant/HuntTrainAssistant.json" "release/HuntTrainAssistant.json"
+          ls -la release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          for file in *; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" > "$file.sha256"
+            fi
+          done
+
+      - name: Create and push tag
+        run: |
+          TAG="v${VERSION}"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          if [ "${{ needs.detect-version-change.outputs.tag-exists }}" = "true" ]; then
+            echo "Deleting existing tag $TAG"
+            git tag -d $TAG || true
+            git push origin :refs/tags/$TAG || true
+          fi
+          git tag $TAG -m "Release version ${VERSION}"
+          git push origin $TAG
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: "HuntTrainAssistant v${{ env.VERSION }}"
+          body: |
+            ## HuntTrainAssistant v${{ env.VERSION }}
+
+            This release was automatically created following a version bump.
+
+            ### Changes in this release
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Installation Files
+            - `latest.zip` - **Plugin archive for installation**
+            - `HuntTrainAssistant.json` - Plugin manifest
+            - `*.sha256` - Checksums for verification
+          files: |
+            release/*
+          draft: false
+          prerelease: false
+
+      - name: Check plugin repo token
+        id: plugin-token
+        env:
+          PLUGIN_TOKEN: ${{ secrets.PLUGIN_REPO_TOKEN }}
+        run: |
+          if [ -n "$PLUGIN_TOKEN" ]; then
+            echo "has-token=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-token=false" >> $GITHUB_OUTPUT
+            echo "PLUGIN_REPO_TOKEN is not set, skipping pluginmaster update"
+          fi
+
+      - name: Publish to DalamudPlugins repo
+        if: steps.plugin-token.outputs.has-token == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: QianChangUwU/DalamudPlugins
+          token: ${{ secrets.PLUGIN_REPO_TOKEN }}
+          path: dalamud-plugins
+
+      - name: Update pluginmaster.json
+        if: steps.plugin-token.outputs.has-token == 'true'
+        run: |
+          python3 .github/update_pluginmaster.py \
+            dalamud-plugins \
+            "${{ env.VERSION }}" \
+            "${{ github.repository }}"
+
+      - name: Commit and push to DalamudPlugins
+        if: steps.plugin-token.outputs.has-token == 'true'
+        run: |
+          cd dalamud-plugins
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add pluginmaster.json
+          git commit -m "Update HuntTrainAssistant to v${VERSION}"
+          git push
